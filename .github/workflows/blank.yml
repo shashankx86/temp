@@ -1,28 +1,16 @@
-name: Calinix Build ISO 
-
+name: ci # 
 on:
   push:
-    branches:
+    branches: # 
       - master
-      - main # In case we adopt this convention in the future
-  pull_request:
-    paths-ignore:
-      - 'docs/**'
-      - '**.editorconfig'
-      - '**.gitignore'
-      - '**.md'
-      - 'LICENSE'
-      - 'PKGBUILD'
-  release:
-    types:
-      - created
+      - main
 
 jobs:
-  build:
+
+  deploy:
     runs-on: ubuntu-latest
-    container:
-      image: archlinux:latest
-      options: --privileged
     steps:
       - uses: actions/checkout@v2
-      - run: echo ${{ github.workspace }}
+      - run: |
+          touch CANME
+          echo "gg" > CNAME
