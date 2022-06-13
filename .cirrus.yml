@@ -10,13 +10,13 @@ task:
       memory: 20G
 
   Setup:
-      - curl -sL https://raw.githubusercontent.com/shashankx86/temp/main/srcipts/Setup.sh | bash
+    - curl -sL https://raw.githubusercontent.com/shashankx86/temp/main/srcipts/Setup.sh | bash
 
   Sync:
-      - curl -sL https://raw.githubusercontent.com/shashankx86/temp/main/srcipts/Sync.sh | bash
+    - curl -sL https://raw.githubusercontent.com/shashankx86/temp/main/srcipts/Sync.sh | bash
 
   Build:
-      - curl -sL https://raw.githubusercontent.com/shashankx86/temp/main/srcipts/Build.sh | bash
+    - curl -sL https://raw.githubusercontent.com/shashankx86/temp/main/srcipts/Build.sh | bash
 
   Upload:
-      - curl -sL https://raw.githubusercontent.com/shashankx86/temp/main/srcipts/Uplaod.sh | bash
+    - curl -sL https://raw.githubusercontent.com/shashankx86/temp/main/srcipts/Uplaod.sh | bash
