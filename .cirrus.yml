@@ -1,0 +1,39 @@
+env:
+    CIRRUS_SHELL: bash
+
+task:
+  name: "ROM Build"
+  timeout_in: 180m
+  container:
+      image: ghcr.io/sushrut1101/docker:latest
+      cpu: 8
+      memory: 20G
+
+  Setup:
+      - export USE_CCACHE=1
+      - export CCACHE_EXEC=/usr/bin/ccache
+      - sudo apt install git
+      - cd ~/
+      - git clone https://github.com/akhilnarang/scripts
+      - ./scripts/setup/android_build_env.sh
+      - mkdir -p ~/bin
+      - mkdir -p ~/android/pe
+      - curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+      - chmod a+x ~/bin/repo
+      - git config --global user.email "shashankspis20@gmail.com"
+      - git config --global user.name "shashankx86"
+
+  Sync:
+      - cd ~/android/pe
+      - repo init -u https://github.com/PixelExperience/manifest -b twelve-plus
+      - repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+
+  Build:
+      - source build/envsetup.sh
+      - lunch aosp_spes-userdebug
+
+  Upload:
+      - export TIMEOUT=43200 # Link timeout (in minutes)
+      - cd $OUT
+      - curl -sL $OUTFILE https://git.io/file-transfer | sh
+      - ./transfer wet .
