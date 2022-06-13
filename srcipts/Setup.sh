@@ -1,5 +1,11 @@
 export USE_CCACHE=1
 export CCACHE_EXEC=/usr/bin/ccache
+
+if [[ $curl_check -gt 0 ]]; then
+    echo -e "Please dont use \'curl\' in $CONFIG".
+    exit 1
+fi
+
 sudo apt install git
 cd ~/
 git clone https://github.com/akhilnarang/scripts
