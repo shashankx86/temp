@@ -3,7 +3,8 @@ export CCACHE_EXEC=/usr/bin/ccache
 sudo apt install git
 cd ~/
 git clone https://github.com/akhilnarang/scripts
-./scripts/setup/android_build_env.sh
+cd scripts
+./setup/android_build_env.sh
 mkdir -p ~/bin
 mkdir -p ~/android/pe
 curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
