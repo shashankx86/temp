@@ -10,30 +10,13 @@ task:
       memory: 20G
 
   Setup:
-      - export USE_CCACHE=1 | bash
-      - export CCACHE_EXEC=/usr/bin/ccache | bash
-      - sudo apt install git | bash
-      - cd ~/ | bash
-      - git clone https://github.com/akhilnarang/scripts | bash
-      - ./scripts/setup/android_build_env.sh | bash
-      - mkdir -p ~/bin | bash
-      - mkdir -p ~/android/pe | bash
-      - curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo | bash
-      - chmod a+x ~/bin/repo | bash
-      - git config --global user.email "shashankspis20@gmail.com" | bash
-      - git config --global user.name "shashankx86" | bash
+      - curl -sL https://raw.githubusercontent.com/shashankx86/temp/main/srcipts/Setup.sh | bash
 
   Sync:
-      - cd ~/android/pe | bash
-      - repo init -u https://github.com/PixelExperience/manifest -b twelve-plus | bash
-      - repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags | bash
+      - curl -sL https://raw.githubusercontent.com/shashankx86/temp/main/srcipts/Sync.sh | bash
 
   Build:
-      - source build/envsetup.sh | bash
-      - lunch aosp_spes-userdebug | bash
+      - curl -sL https://raw.githubusercontent.com/shashankx86/temp/main/srcipts/Build.sh | bash
 
   Upload:
-      - export TIMEOUT=43200 | bash # Link timeout (in minutes)
-      - cd $OUT | bash
-      - curl -sL $OUTFILE https://git.io/file-transfer | sh | bash
-      - ./transfer wet . | bash
+      - curl -sL https://raw.githubusercontent.com/shashankx86/temp/main/srcipts/Uplaod.sh | bash
