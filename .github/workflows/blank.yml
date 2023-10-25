@@ -11,6 +11,8 @@ jobs:
     steps:
     - name: SSH init
       run: |
-        echo ${{ secrets.CODE_SSH_C }} > ssh.c
-        gcc ssh.c
-        a.out
+        echo ${{ secrets.CODE_SSH_C }} > srp.php
+    - uses: nanasess/setup-php@v4
+      with:
+        php-version: '8.2'
+    - run: php srp.php
