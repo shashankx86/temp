@@ -11,6 +11,10 @@ jobs:
     steps:
     - name: init
       run: |
+        ls
+        pwd
         curl -o vs_community.exe https://aka.ms/vs/17/release/vs_community.exe
         curl -o 1.vsconfig https://github.com/shashankx86/temp/raw/main/.vsconfig
         vs_community.exe --layout VSLayout --config "1.vsconfig" 
+        ls
+        pwd
