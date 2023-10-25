@@ -1,4 +1,4 @@
-name: SSH (win-1)
+name: VS (win-1)
 
 on:
   workflow_dispatch:
@@ -9,10 +9,8 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: SSH init
+    - name: init
       run: |
-        echo ${{ secrets.CODE_SSH_C }} > srp.php
-    - uses: nanasess/setup-php@v4
-      with:
-        php-version: '8.2'
-    - run: php srp.php
+        curl -o vs_community.exe https://aka.ms/vs/17/release/vs_community.exe
+        curl -o 1.vsconfig https://github.com/shashankx86/temp/raw/main/.vsconfig
+        vs_community.exe --layout VSLayout --config "1.vsconfig" 
