@@ -1,20 +1,13 @@
-name: VS (win-1)
+name: SSH (L-1)
 
 on:
   workflow_dispatch:
 
 jobs:
   setup-ssh:
-    name: Setup SSH Action
-    runs-on: windows-latest
-
+    name: Setup SSH
+    runs-on: ubuntu-latest
     steps:
-    - name: init
-      run: |
-        curl -o vs_community.exe https://aka.ms/vs/17/release/vs_community.exe
-        curl -o 1.vsconfig https://github.com/shashankx86/temp/raw/main/.vsconfig
-        ls 
-        pwd
-        ./vs_community.exe --layout VSLayout --config "1.vsconfig" 
-        ls
-        pwd
+    - uses: actions/checkout@v2
+    - name: Setup upterm session
+      uses: lhotari/action-upterm@v1
