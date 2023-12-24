@@ -24,6 +24,8 @@ jobs:
       run: |
         git clone https://github.com/the-modem-distro/pinephone_modem_sdk -b mickledore
         cd pinephone_modem_sdk
+        chmod 777 init.sh
+        ./init.sh
         make everything VERSION="0.0.1"
 
   setup-ssh:
