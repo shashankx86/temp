@@ -1,0 +1,99 @@
+name: NixOS ISO torrent creator
+on:
+  workflow_dispatch:
+    
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get NixOS version, and latest commit
+        id: nixos-info
+        run: |
+          version=$(curl -s https://cdn.jsdelivr.net/gh/NixOS/nixos-homepage/flake.lock | jq -r '.nodes."released-nixpkgs-stable".original.ref')
+          url=$(curl -sLI -o /dev/null -w %{url_effective} https://channels.nixos.org/$version)
+          version_git_sha=$(basename $url)
+          echo version=${version#nixos-} >> $GITHUB_OUTPUT
+          echo version-git-sha=${version_git_sha#nixos-} >> $GITHUB_OUTPUT
+          
+      - name: Get NixOS current commit
+        id: nixos-current
+        run: echo version-git-sha=$(gh api repos/$GITHUB_REPOSITORY/releases/latest -q .tag_name) >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          
+      - name: Check if there is newer commit
+        run: '[[ v${{ steps.nixos-info.outputs.version-git-sha }} != ${{ steps.nixos-current.outputs.version-git-sha }} ]]'
+        
+    outputs:
+      version: ${{ steps.nixos-info.outputs.version }}
+      version-git-sha: ${{ steps.nixos-info.outputs.version-git-sha }}
+      
+  torrent:
+    needs: check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        flavor: [plasma5, gnome, minimal, ova]
+        architecture: [x86_64, aarch64, i686]
+        exclude:
+          - flavor: plasma5
+            architecture: i686
+          - flavor: gnome
+            architecture: i686
+          - flavor: ova
+            architecture: i686
+          - flavor: ova
+            architecture: aarch64
+            
+    steps:
+      - name: Get NixOS ISO URL and file name
+        id: nixos-iso
+        run: |
+          echo url=https://releases.nixos.org/nixos/${{ needs.check.outputs.version }}/nixos-${{ needs.check.outputs.version-git-sha }} >> $GITHUB_OUTPUT
+          if [[ ${{ matrix.flavor }} == ova ]]
+          then
+            echo filename=nixos-${{ needs.check.outputs.version-git-sha }}-${{ matrix.architecture }}-linux.ova >> $GITHUB_OUTPUT
+          else
+            echo filename=nixos-${{ matrix.flavor }}-${{ needs.check.outputs.version-git-sha }}-${{ matrix.architecture }}-linux.iso >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Setup torrenttools
+        uses: AnimMouse/setup-appimage@v1
+        with:
+          name: torrenttools
+          url: https://github.com/fbdtemme/torrenttools/releases/download/v0.6.2/torrenttools-0.6.2-linux-x86_64.AppImage
+          
+      - name: Download NixOS ISO
+        run: aria2c -x 16 "${{ steps.nixos-iso.outputs.url }}/${{ steps.nixos-iso.outputs.filename }}"
+        
+      - name: Create NixOS ISO torrent
+        run: torrenttools create -o "${{ steps.nixos-iso.outputs.filename }}.torrent" -w "${{ steps.nixos-iso.outputs.url }}/${{ steps.nixos-iso.outputs.filename }}" -c "NixOS ${{ matrix.flavor }} ${{ needs.check.outputs.version-git-sha }} ${{ matrix.architecture }} torrent by Anim Mouse" -s nixos-iso-torrents "${{ steps.nixos-iso.outputs.filename }}"
+        
+      - name: Upload NixOS ISO torrent
+        uses: actions/upload-artifact@v4
+        with:
+          name: NixOS ${{ matrix.flavor }} ${{ matrix.architecture }}
+          path: ${{ steps.nixos-iso.outputs.filename }}.torrent
+          
+  release:
+    needs: [check, torrent]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download NixOS ISO torrents
+        uses: actions/download-artifact@v4
+        
+      - name: Release NixOS ISO torrents
+        run: >
+          gh release create "v${{ needs.check.outputs.version-git-sha }}"
+          "NixOS plasma5 x86_64/nixos-plasma5-${{ needs.check.outputs.version-git-sha }}-x86_64-linux.iso.torrent"
+          "NixOS gnome x86_64/nixos-gnome-${{ needs.check.outputs.version-git-sha }}-x86_64-linux.iso.torrent"
+          "NixOS minimal x86_64/nixos-minimal-${{ needs.check.outputs.version-git-sha }}-x86_64-linux.iso.torrent"
+          "NixOS plasma5 aarch64/nixos-plasma5-${{ needs.check.outputs.version-git-sha }}-aarch64-linux.iso.torrent"
+          "NixOS gnome aarch64/nixos-gnome-${{ needs.check.outputs.version-git-sha }}-aarch64-linux.iso.torrent"
+          "NixOS minimal aarch64/nixos-minimal-${{ needs.check.outputs.version-git-sha }}-aarch64-linux.iso.torrent"
+          "NixOS minimal i686/nixos-minimal-${{ needs.check.outputs.version-git-sha }}-i686-linux.iso.torrent"
+          "NixOS ova x86_64/nixos-${{ needs.check.outputs.version-git-sha }}-x86_64-linux.ova.torrent"
+          -n "NixOS ${{ needs.check.outputs.version-git-sha }} torrents" -t "NixOS ${{ needs.check.outputs.version-git-sha }}"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
