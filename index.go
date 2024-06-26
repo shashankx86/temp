@@ -14,6 +14,8 @@ import (
 	"github.com/ulule/limiter/v3"
 	"github.com/ulule/limiter/v3/drivers/middleware/stdlib"
 	"github.com/ulule/limiter/v3/drivers/store/memory"
+
+	// "napi/components"
 )
 
 var (
@@ -103,7 +105,18 @@ func main() {
 		port = "5499"
 	}
 	log.Printf("Server is running on port %s", port)
-	log.Fatal(http.ListenAndServeTLS(":"+port, "server.crt", "server.key", r))
+	// log.Fatal(http.ListenAndServeTLS(":"+port, "certs/serxver.crt", "certs/sexrver.key", r))
+	log.Fatal(http.ListenAndServe(":"+port, r))
+
+	// Start WebSocket server
+    go components.StartWebSocketServer()
+
+    websocket_port := os.Getenv("WEBSOCKET_PORT")
+    if websocket_port == "" {
+        websocket_port = "5498"
+    }
+    log.Printf("Server is running on port %s", websocket_port)
+    log.Fatal(http.ListenAndServeTLS(":"+websocket_port, "certs/server.crt", "certs/server.key", r))
 }
 
 // Handles the login requests and validates the user credentials
