@@ -19,10 +19,11 @@ import (
 )
 
 var (
-	store    *sessions.CookieStore
-	VERSION  string
-	USERNAME string
-	PASSWORD string
+	store      *sessions.CookieStore
+	VERSION    string
+	USERNAME   string
+	PASSWORD   string
+	VERBOSE_LOG bool
 )
 
 func init() {
@@ -46,10 +47,26 @@ func init() {
 	USERNAME = os.Getenv("USERNAME")
 	PASSWORD = os.Getenv("PASSWORD")
 
+	// Load verbose logging flag
+	VERBOSE_LOG = true
+
 	// Ensure required environment variables are set
 	if USERNAME == "" || PASSWORD == "" || VERSION == "" {
 		log.Fatal("Missing required environment variables: USERNAME, PASSWORD, VERSION")
 	}
+
+	// Set up logging to file
+	setupLogging()
+}
+
+// setupLogging initializes logging to a file, appending to it if it exists
+func setupLogging() {
+	logFile, err := os.OpenFile("serve.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.SetOutput(logFile)
+	log.Printf("Server started at: %s", time.Now().Format(time.RFC3339))
 }
 
 func main() {
@@ -145,9 +162,19 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Validate the provided credentials
 	if creds.Username == USERNAME && creds.Password == PASSWORD {
+		// Invalidate previous session if exists
 		session, _ := store.Get(r, "session")
+		session.Values = make(map[interface{}]interface{})
+		session.Save(r, w)
+
+		// Create a new session
+		session, _ = store.Get(r, "session")
 		session.Values["user"] = USERNAME
 		session.Save(r, w)
+
+		if VERBOSE_LOG {
+			log.Printf("User %s logged in at %s", USERNAME, time.Now().Format(time.RFC3339))
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
