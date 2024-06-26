@@ -15,7 +15,7 @@ import (
 	"github.com/ulule/limiter/v3/drivers/middleware/stdlib"
 	"github.com/ulule/limiter/v3/drivers/store/memory"
 
-	// "napi/components"
+	"napi/components"
 )
 
 var (
@@ -55,7 +55,7 @@ func init() {
 func main() {
 	serverUsername := os.Getenv("USER")
 	corsOptions := cors.Options{
-		AllowedOrigins:   []string{"https://ncwi." + serverUsername + ".hackclub.app"},
+		AllowedOrigins:   []string{"https://ncwi." + serverUsername + ".hackclub.app", "http://localhost"},
 		AllowedMethods:   []string{"GET", "POST", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
@@ -104,19 +104,29 @@ func main() {
 	if port == "" {
 		port = "5499"
 	}
-	log.Printf("Server is running on port %s", port)
-	// log.Fatal(http.ListenAndServeTLS(":"+port, "certs/serxver.crt", "certs/sexrver.key", r))
-	log.Fatal(http.ListenAndServe(":"+port, r))
+
+	websocketPort := os.Getenv("WEBSOCKET_PORT")
+	if websocketPort == "" {
+		websocketPort = "5498"
+	}
+
+	// Start HTTP API server
+	go func() {
+		log.Printf("API server is running on port %s", port)
+		log.Fatal(http.ListenAndServe(":"+port, r))
+	}()
 
 	// Start WebSocket server
-    go components.StartWebSocketServer()
+	go func() {
+		go components.StartWebSocketServer()
+		// websocketRouter := mux.NewRouter()
+		// Add WebSocket handler here
+		// log.Printf("WebSocket server is running on port %s", websocketPort)
+		// log.Fatal(http.ListenAndServe(":"+websocketPort, websocketRouter))
+	}()
 
-    websocket_port := os.Getenv("WEBSOCKET_PORT")
-    if websocket_port == "" {
-        websocket_port = "5498"
-    }
-    log.Printf("Server is running on port %s", websocket_port)
-    log.Fatal(http.ListenAndServeTLS(":"+websocket_port, "certs/server.crt", "certs/server.key", r))
+	// Block the main goroutine
+	select {}
 }
 
 // Handles the login requests and validates the user credentials
