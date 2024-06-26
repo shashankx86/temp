@@ -10,21 +10,39 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
+	"github.com/joho/godotenv"
 	"github.com/ulule/limiter/v3"
 	"github.com/ulule/limiter/v3/drivers/middleware/stdlib"
 	"github.com/ulule/limiter/v3/drivers/store/memory"
 )
 
 var (
-	key   = []byte("secret-key")
-	store = sessions.NewCookieStore(key)
+	store    *sessions.CookieStore
+	VERSION  string
+	USERNAME string
+	PASSWORD string
 )
 
-const (
-	USERNAME = "test"
-	PASSWORD = "test"
-	VERSION  = "0.0.1"
-)
+func init() {
+	// Load environment variables from .env file
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Error loading .env file: %v", err)
+	}
+
+	// Initialize session store
+	key := []byte(os.Getenv("SESSION_KEY"))
+	store = sessions.NewCookieStore(key)
+
+	// Load credentials and version from environment variables
+	VERSION = os.Getenv("VERSION")
+	USERNAME = os.Getenv("USERNAME")
+	PASSWORD = os.Getenv("PASSWORD")
+
+	// Ensure required environment variables are set
+	if USERNAME == "" || PASSWORD == "" || VERSION == "" {
+		log.Fatal("Missing required environment variables: USERNAME, PASSWORD, VERSION")
+	}
+}
 
 func main() {
 	serverUsername := os.Getenv("USER")
@@ -41,9 +59,9 @@ func main() {
 	r.Use(cors.Handler(corsOptions))
 
 	// General rate limiter configuration for other routes
-	generalRate, err := limiter.NewRateFromFormatted("10-M")
-	if err != nil {
-		log.Fatal(err)
+	generalRate := limiter.Rate{
+		Period: 1 * time.Minute,
+		Limit:  10,
 	}
 	generalLimiterStore := memory.NewStore()
 	generalLimiter := limiter.New(generalLimiterStore, generalRate)

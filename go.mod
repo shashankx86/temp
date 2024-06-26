@@ -10,6 +10,7 @@ require (
 
 require (
 	github.com/gorilla/securecookie v1.1.2 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/ulule/limiter/v3 v3.11.2 // indirect
 )
