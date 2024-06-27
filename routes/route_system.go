@@ -156,6 +156,48 @@ func WriteFile(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func ReadFile(w http.ResponseWriter, r *http.Request) {
+	filename := r.URL.Query().Get("filename")
+	filepath := r.URL.Query().Get("filepath")
+	if filename == "" || filepath == "" {
+		http.Error(w, "Filename and filepath are required", http.StatusBadRequest)
+		return
+	}
+
+	fullPath := filepath + "/" + filename
+	fileContent, err := os.ReadFile(fullPath)
+	if err != nil {
+		http.Error(w, "Error reading file "+filename+" at "+filepath, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"content": string(fileContent),
+	})
+}
+
+func ScheduleTask(w http.ResponseWriter, r *http.Request) {
+	time := r.URL.Query().Get("time")
+	command := r.URL.Query().Get("command")
+	if time == "" || command == "" {
+		http.Error(w, "Both time and command are required", http.StatusBadRequest)
+		return
+	}
+
+	atCommand := fmt.Sprintf(`echo "%s" | at %s`, command, time)
+	_, err := executeCommand(atCommand)
+	if err != nil {
+		http.Error(w, "Error scheduling task at "+time, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Task scheduled at " + time,
+	})
+}
+
 func RegisterSystemRoutes(r *mux.Router) {
 	systemRouter := r.PathPrefix("/system").Subrouter()
 
@@ -166,4 +208,6 @@ func RegisterSystemRoutes(r *mux.Router) {
 	systemRouter.HandleFunc("/services/stop", StopService).Methods("POST")
 	systemRouter.HandleFunc("/services/restart", RestartService).Methods("POST")
 	systemRouter.HandleFunc("/write", WriteFile).Methods("POST")
+	systemRouter.HandleFunc("/read", ReadFile).Methods("GET")
+	systemRouter.HandleFunc("/at", ScheduleTask).Methods("POST")
 }
