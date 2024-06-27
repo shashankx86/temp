@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/user"
 	"time"
 
 	"github.com/go-chi/cors"
@@ -21,9 +22,10 @@ import (
 )
 
 var (
-	store       *sessions.CookieStore
-	VERSION     string
-	VERBOSE_LOG bool
+	store   *sessions.CookieStore
+	VERSION string
+	LOG     bool
+	V_LOG   bool
 )
 
 func init() {
@@ -43,10 +45,11 @@ func init() {
 	}
 
 	// Load version from environment variables
-	VERSION = os.Getenv("VERSION")
+	VERSION = "0.0.2"
 
-	// Load verbose logging flag
-	VERBOSE_LOG = true
+	// Load logging flags
+	LOG = true
+	V_LOG = true
 
 	// Set up logging to file
 	setupLogging()
@@ -63,7 +66,13 @@ func setupLogging() {
 }
 
 func main() {
-	serverUsername := os.Getenv("USER")
+	// Get the current user's username on the host machine
+	currentUser, err := user.Current()
+	if err != nil {
+		log.Fatalf("Error getting current user: %v", err)
+	}
+	serverUsername := currentUser.Username
+
 	corsOptions := cors.Options{
 		AllowedOrigins:   []string{"https://ncwi." + serverUsername + ".hackclub.app", "http://localhost"},
 		AllowedMethods:   []string{"GET", "POST", "DELETE", "OPTIONS"},
@@ -185,8 +194,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	session.Values["user"] = creds.Username
 	session.Save(r, w)
 
-	if VERBOSE_LOG {
-		log.Printf("User %s logged in at %s", creds.Username, time.Now().Format(time.RFC3339))
+	if V_LOG {
+		log.Printf("User %s logged in at %s from IP %s", creds.Username, time.Now().Format(time.RFC3339), r.RemoteAddr)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
