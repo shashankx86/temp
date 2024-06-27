@@ -122,6 +122,34 @@ func restartContainer(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Container restarted successfully"})
 }
 
+// Endpoint to remove a Docker image
+func removeDockerImage(w http.ResponseWriter, r *http.Request) {
+	targetID := r.URL.Query().Get("targetid")
+	if targetID == "" {
+		http.Error(w, "targetid is required", http.StatusBadRequest)
+		return
+	}
+
+	forceFlag := ""
+	if r.URL.Query().Get("toforce") == "true" {
+		forceFlag = "--force"
+	}
+
+	args := []string{"image", "rm", targetID}
+	if forceFlag != "" {
+		args = append(args, forceFlag)
+	}
+
+	if _, err := executeCommand("docker", args...); err != nil {
+		http.Error(w, "Error removing image: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Image removed successfully"})
+}
+
 // DockerHandler defines the handler for Docker-related routes
 func DockerHandler(router *mux.Router) {
 	dockerRouter := router.PathPrefix("/docker").Subrouter()
@@ -131,4 +159,5 @@ func DockerHandler(router *mux.Router) {
 	dockerRouter.HandleFunc("/stop", stopContainer).Methods("POST", "OPTIONS")
 	dockerRouter.HandleFunc("/restart", restartContainer).Methods("POST", "OPTIONS")
 	dockerRouter.HandleFunc("/image/ls", listDockerImages).Methods("GET", "OPTIONS")
+	dockerRouter.HandleFunc("/image/rm", removeDockerImage).Methods("DELETE", "OPTIONS")
 }
