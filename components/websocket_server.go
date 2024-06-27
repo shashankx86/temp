@@ -4,7 +4,7 @@ import (
     "log"
     "os"
     "os/exec"
-    "strings"
+    // "strings"
 
     "github.com/creack/pty"
     "github.com/gorilla/websocket"
@@ -28,12 +28,14 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
     var shell *exec.Cmd
     var ptyFile *os.File
 
-    existingSessions, err := exec.Command("tmux", "ls").Output()
-    if err == nil && strings.Contains(string(existingSessions), "ncwi-shell") {
-        shell = exec.Command("tmux", "attach-session", "-t", "ncwi-shell")
-    } else {
-        shell = exec.Command("tmux", "new-session", "-s", "ncwi-shell")
-    }
+    // existingSessions, err := exec.Command("tmux", "ls").Output()
+    // if err == nil && strings.Contains(string(existingSessions), "ncwi-shell") {
+    //     shell = exec.Command("tmux", "attach-session", "-t", "ncwi-shell")
+    // } else {
+    //     shell = exec.Command("tmux", "new-session", "-s", "ncwi-shell", "-d", "resize-pane", "-Z")
+    // }
+
+    shell = exec.Command("bash")
 
     ptyFile, err = pty.Start(shell)
     if err != nil {
