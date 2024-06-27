@@ -107,6 +107,21 @@ func stopContainer(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Container stopped successfully"})
 }
 
+// Endpoint to restart a Docker container
+func restartContainer(w http.ResponseWriter, r *http.Request) {
+	target := r.URL.Query().Get("target")
+	if target == "" {
+		http.Error(w, "target is required", http.StatusBadRequest)
+		return
+	}
+	if err := exec.Command("docker", "restart", target).Run(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Container restarted successfully"})
+}
+
 // DockerHandler defines the handler for Docker-related routes
 func DockerHandler(router *mux.Router) {
 	dockerRouter := router.PathPrefix("/docker").Subrouter()
@@ -114,4 +129,6 @@ func DockerHandler(router *mux.Router) {
 	dockerRouter.HandleFunc("/running", listRunningContainers).Methods("GET", "OPTIONS")
 	dockerRouter.HandleFunc("/start", startContainer).Methods("POST", "OPTIONS")
 	dockerRouter.HandleFunc("/stop", stopContainer).Methods("POST", "OPTIONS")
+	dockerRouter.HandleFunc("/restart", restartContainer).Methods("POST", "OPTIONS")
+	dockerRouter.HandleFunc("/image/ls", listDockerImages).Methods("GET", "OPTIONS")
 }
