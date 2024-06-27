@@ -1,9 +1,10 @@
+// index.go
 package main
 
 import (
 	"encoding/json"
-	"log"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/user"
@@ -13,10 +14,10 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"github.com/joho/godotenv"
+	"github.com/msteinert/pam"
 	"github.com/ulule/limiter/v3"
 	"github.com/ulule/limiter/v3/drivers/middleware/stdlib"
 	"github.com/ulule/limiter/v3/drivers/store/memory"
-	"github.com/msteinert/pam"
 
 	"napi/components"
 	"napi/routes"
@@ -40,9 +41,9 @@ func init() {
 	store = sessions.NewCookieStore(key)
 	store.Options = &sessions.Options{
 		Path:     "/",
-		MaxAge:   0,        // Session cookie expires when the browser closes
-		HttpOnly: true,     // Prevent JavaScript access to the cookie
-		Secure:   true,     // Ensure the cookie is only sent over HTTPS
+		MaxAge:   0,    // Session cookie expires when the browser closes
+		HttpOnly: true, // Prevent JavaScript access to the cookie
+		Secure:   true, // Ensure the cookie is only sent over HTTPS
 	}
 
 	// Load version from environment variables
@@ -131,6 +132,12 @@ func main() {
 	systemRouter.Use(stdlib.NewMiddleware(systemLimiter).Handler)
 	systemRouter.Use(isAuthenticated)
 	routes.RegisterSystemRoutes(systemRouter)
+
+	// Register Docker routes under /io with same rate limiting and authentication
+	ioRouter := r.PathPrefix("/io").Subrouter()
+	ioRouter.Use(stdlib.NewMiddleware(systemLimiter).Handler)
+	ioRouter.Use(isAuthenticated)
+	routes.DockerHandler(ioRouter)
 
 	port := os.Getenv("PORT")
 	if port == "" {
