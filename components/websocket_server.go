@@ -1,3 +1,5 @@
+// components/websocket_server.go
+
 package components
 
 import (

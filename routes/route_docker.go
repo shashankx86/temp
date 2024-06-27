@@ -51,9 +51,67 @@ func listRunningContainers(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{"containers": containers})
 }
 
+// Endpoint to list Docker images
+func listDockerImages(w http.ResponseWriter, r *http.Request) {
+	output, err := executeCommand("docker", "image", "ls")
+	if err != nil {
+		http.Error(w, "Error fetching Docker images: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	headers := strings.Fields(lines[0])
+	images := make([]map[string]string, 0, len(lines)-1)
+
+	for _, line := range lines[1:] {
+		columns := strings.Fields(line)
+		image := make(map[string]string)
+		for i, header := range headers {
+			image[strings.ReplaceAll(header, " ", "_")] = columns[i]
+		}
+		images = append(images, image)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{"images": images})
+}
+
+// Endpoint to start a Docker container
+func startContainer(w http.ResponseWriter, r *http.Request) {
+	target := r.URL.Query().Get("target")
+	if target == "" {
+		http.Error(w, "target is required", http.StatusBadRequest)
+		return
+	}
+	if err := exec.Command("docker", "start", target).Run(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Container started successfully"})
+}
+
+// Endpoint to stop a Docker container
+func stopContainer(w http.ResponseWriter, r *http.Request) {
+	target := r.URL.Query().Get("target")
+	if target == "" {
+		http.Error(w, "target is required", http.StatusBadRequest)
+		return
+	}
+	if err := exec.Command("docker", "stop", target).Run(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Container stopped successfully"})
+}
+
 // DockerHandler defines the handler for Docker-related routes
 func DockerHandler(router *mux.Router) {
 	dockerRouter := router.PathPrefix("/docker").Subrouter()
 
 	dockerRouter.HandleFunc("/running", listRunningContainers).Methods("GET", "OPTIONS")
+	dockerRouter.HandleFunc("/start", startContainer).Methods("POST", "OPTIONS")
+	dockerRouter.HandleFunc("/stop", stopContainer).Methods("POST", "OPTIONS")
 }
