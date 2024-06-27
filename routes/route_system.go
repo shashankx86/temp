@@ -77,10 +77,50 @@ func ListServices(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func StartService(w http.ResponseWriter, r *http.Request) {
+	service := r.URL.Query().Get("target")
+	if service == "" {
+		http.Error(w, "Service name is required", http.StatusBadRequest)
+		return
+	}
+
+	err := exec.Command("systemctl", "--user", "start", service).Run()
+	if err != nil {
+		http.Error(w, "Error starting service "+service, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Service " + service + " started successfully",
+	})
+}
+
+func StopService(w http.ResponseWriter, r *http.Request) {
+	service := r.URL.Query().Get("target")
+	if service == "" {
+		http.Error(w, "Service name is required", http.StatusBadRequest)
+		return
+	}
+
+	err := exec.Command("systemctl", "--user", "stop", service).Run()
+	if err != nil {
+		http.Error(w, "Error stopping service "+service, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Service " + service + " stopped successfully",
+	})
+}
+
 func RegisterSystemRoutes(r *mux.Router) {
 	systemRouter := r.PathPrefix("/system").Subrouter()
 
 	systemRouter.Use(systemLimiterMiddleware.Handler)
 
 	systemRouter.HandleFunc("/services", ListServices).Methods("GET")
+	systemRouter.HandleFunc("/services/start", StartService).Methods("POST")
+	systemRouter.HandleFunc("/services/stop", StopService).Methods("POST")
 }
