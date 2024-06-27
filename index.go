@@ -19,6 +19,7 @@ import (
 	"github.com/msteinert/pam"
 
 	"napi/components"
+	"napi/routes"
 )
 
 var (
@@ -88,10 +89,10 @@ func main() {
 	// Apply security headers middleware
 	r.Use(securityHeadersMiddleware)
 
-	// General rate limiter configuration for all routes except login
+	// General rate limiter configuration for all routes except login and system
 	generalRate := limiter.Rate{
 		Period: 1 * time.Minute,
-		Limit:  10,
+		Limit:  60,
 	}
 	generalLimiterStore := memory.NewStore()
 	generalLimiter := limiter.New(generalLimiterStore, generalRate)
@@ -99,8 +100,8 @@ func main() {
 
 	// Rate limiter configuration for login route
 	loginRate := limiter.Rate{
-		Period: 10 * time.Minute,
-		Limit:  25,
+		Period: 1 * time.Minute,
+		Limit:  40,
 	}
 	loginLimiterStore := memory.NewStore()
 	loginLimiter := limiter.New(loginLimiterStore, loginRate)
@@ -118,6 +119,18 @@ func main() {
 
 	// Apply general rate limiting to all routes except login
 	r.Use(generalLimiterMiddleware.Handler)
+
+	// Register system routes with specific rate limiter
+	systemRouter := r.PathPrefix("/system").Subrouter()
+	systemRate := limiter.Rate{
+		Period: 1 * time.Minute,
+		Limit:  70,
+	}
+	systemLimiterStore := memory.NewStore()
+	systemLimiter := limiter.New(systemLimiterStore, systemRate)
+	systemRouter.Use(stdlib.NewMiddleware(systemLimiter).Handler)
+	systemRouter.Use(isAuthenticated)
+	routes.RegisterSystemRoutes(systemRouter)
 
 	port := os.Getenv("PORT")
 	if port == "" {
