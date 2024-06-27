@@ -115,6 +115,47 @@ func StopService(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func RestartService(w http.ResponseWriter, r *http.Request) {
+	service := r.URL.Query().Get("target")
+	if service == "" {
+		http.Error(w, "Service name is required", http.StatusBadRequest)
+		return
+	}
+
+	err := exec.Command("systemctl", "--user", "restart", service).Run()
+	if err != nil {
+		http.Error(w, "Error restarting service "+service, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Service " + service + " restarted successfully",
+	})
+}
+
+func WriteFile(w http.ResponseWriter, r *http.Request) {
+	filename := r.URL.Query().Get("filename")
+	filepath := r.URL.Query().Get("filepath")
+	filecontent := r.URL.Query().Get("filecontent")
+	if filename == "" || filepath == "" || filecontent == "" {
+		http.Error(w, "Filename, filepath, and filecontent are required", http.StatusBadRequest)
+		return
+	}
+
+	fullPath := filepath + "/" + filename
+	err := os.WriteFile(fullPath, []byte(filecontent), 0644)
+	if err != nil {
+		http.Error(w, "Error saving file "+filename+" at "+filepath, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "File " + filename + " saved successfully at " + filepath,
+	})
+}
+
 func RegisterSystemRoutes(r *mux.Router) {
 	systemRouter := r.PathPrefix("/system").Subrouter()
 
@@ -123,4 +164,6 @@ func RegisterSystemRoutes(r *mux.Router) {
 	systemRouter.HandleFunc("/services", ListServices).Methods("GET")
 	systemRouter.HandleFunc("/services/start", StartService).Methods("POST")
 	systemRouter.HandleFunc("/services/stop", StopService).Methods("POST")
+	systemRouter.HandleFunc("/services/restart", RestartService).Methods("POST")
+	systemRouter.HandleFunc("/write", WriteFile).Methods("POST")
 }
