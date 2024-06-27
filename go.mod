@@ -9,6 +9,7 @@ require (
 	github.com/gorilla/sessions v1.3.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
+	github.com/msteinert/pam v1.2.0
 	github.com/ulule/limiter/v3 v3.11.2
 )
 

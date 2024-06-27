@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -14,15 +15,14 @@ import (
 	"github.com/ulule/limiter/v3"
 	"github.com/ulule/limiter/v3/drivers/middleware/stdlib"
 	"github.com/ulule/limiter/v3/drivers/store/memory"
+	"github.com/msteinert/pam"
 
 	"napi/components"
 )
 
 var (
-	store      *sessions.CookieStore
-	VERSION    string
-	USERNAME   string
-	PASSWORD   string
+	store       *sessions.CookieStore
+	VERSION     string
 	VERBOSE_LOG bool
 )
 
@@ -42,18 +42,11 @@ func init() {
 		Secure:   true,     // Ensure the cookie is only sent over HTTPS
 	}
 
-	// Load credentials and version from environment variables
+	// Load version from environment variables
 	VERSION = os.Getenv("VERSION")
-	USERNAME = os.Getenv("USERNAME")
-	PASSWORD = os.Getenv("PASSWORD")
 
 	// Load verbose logging flag
 	VERBOSE_LOG = true
-
-	// Ensure required environment variables are set
-	if USERNAME == "" || PASSWORD == "" || VERSION == "" {
-		log.Fatal("Missing required environment variables: USERNAME, PASSWORD, VERSION")
-	}
 
 	// Set up logging to file
 	setupLogging()
@@ -136,17 +129,13 @@ func main() {
 	// Start WebSocket server
 	go func() {
 		go components.StartWebSocketServer()
-		// websocketRouter := mux.NewRouter()
-		// Add WebSocket handler here
-		// log.Printf("WebSocket server is running on port %s", websocketPort)
-		// log.Fatal(http.ListenAndServe(":"+websocketPort, websocketRouter))
 	}()
 
 	// Block the main goroutine
 	select {}
 }
 
-// Handles the login requests and validates the user credentials
+// Handles the login requests and validates the user credentials using PAM
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	var creds struct {
 		Username string `json:"username"`
@@ -160,30 +149,51 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate the provided credentials
-	if creds.Username == USERNAME && creds.Password == PASSWORD {
-		// Invalidate previous session if exists
-		session, _ := store.Get(r, "session")
-		session.Values = make(map[interface{}]interface{})
-		session.Save(r, w)
-
-		// Create a new session
-		session, _ = store.Get(r, "session")
-		session.Values["user"] = USERNAME
-		session.Save(r, w)
-
-		if VERBOSE_LOG {
-			log.Printf("User %s logged in at %s", USERNAME, time.Now().Format(time.RFC3339))
+	// Validate the provided credentials using PAM
+	t, err := pam.StartFunc("", creds.Username, func(s pam.Style, msg string) (string, error) {
+		switch s {
+		case pam.PromptEchoOff:
+			return creds.Password, nil
+		case pam.PromptEchoOn:
+			return creds.Username, nil
+		case pam.ErrorMsg:
+			return "", nil
+		case pam.TextInfo:
+			return "", nil
 		}
+		return "", fmt.Errorf("Unrecognized PAM message style: %v", s)
+	})
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"message":   "Login successful",
-			"sessionId": session.ID,
-		})
-	} else {
-		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+	if err != nil {
+		http.Error(w, "PAM authentication failed", http.StatusUnauthorized)
+		return
 	}
+
+	err = t.Authenticate(0)
+	if err != nil {
+		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		return
+	}
+
+	// Invalidate previous session if exists
+	session, _ := store.Get(r, "session")
+	session.Values = make(map[interface{}]interface{})
+	session.Save(r, w)
+
+	// Create a new session
+	session, _ = store.Get(r, "session")
+	session.Values["user"] = creds.Username
+	session.Save(r, w)
+
+	if VERBOSE_LOG {
+		log.Printf("User %s logged in at %s", creds.Username, time.Now().Format(time.RFC3339))
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message":   "Login successful",
+		"sessionId": session.ID,
+	})
 }
 
 // Middleware to check if the user is authenticated
