@@ -60,15 +60,18 @@ func listDockerImages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(output), "\n")
-	headers := strings.Fields(lines[0])
 	images := make([]map[string]string, 0, len(lines)-1)
 
 	for _, line := range lines[1:] {
 		columns := strings.Fields(line)
 		image := make(map[string]string)
-		for i, header := range headers {
-			image[strings.ReplaceAll(header, " ", "_")] = columns[i]
-		}
+
+		image["SIZE"] = columns[len(columns)-1]
+		image["CREATED"] = columns[len(columns)-4] + " " + columns[len(columns)-3] + " " + columns[len(columns)-2]
+		image["IMAGE_ID"] = columns[len(columns)-5]
+		image["TAG"] = columns[len(columns)-6]
+		image["REPOSITORY"] = strings.Join(columns[:len(columns)-6], " ")
+
 		images = append(images, image)
 	}
 
