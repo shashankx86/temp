@@ -8,8 +8,9 @@ import (
 	"os"
 	"os/exec"
 	"time"
-	"regexp"
+	// "regexp"
 	"fmt"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/ulule/limiter/v3"
@@ -43,22 +44,26 @@ func executeCommand(command string) (string, error) {
 	return string(out), nil
 }
 
-func parseUnits(data string) ([]Unit, error) {
-	unitRegex := `^\s*(\S+\.service|\S+\.socket)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)$`
-	regex := regexp.MustCompile(unitRegex)
-	matches := regex.FindAllStringSubmatch(data, -1)
+
+func parseUnits(data, unitType string) ([]Unit, error) {
+	lines := strings.Split(data, "\n")
 	units := []Unit{}
-	for _, match := range matches {
-		if len(match) < 6 {
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
 			continue
 		}
-		units = append(units, Unit{
-			UNIT:        match[1],
-			LOAD:        match[2],
-			ACTIVE:      match[3],
-			SUB:         match[4],
-			DESCRIPTION: match[5],
-		})
+		if !strings.Contains(fields[0], unitType) {
+			continue
+		}
+		unit := Unit{
+			UNIT:        fields[0],
+			LOAD:        fields[1],
+			ACTIVE:      fields[2],
+			SUB:         fields[3],
+			DESCRIPTION: strings.Join(fields[4:], " "),
+		}
+		units = append(units, unit)
 	}
 	return units, nil
 }
@@ -69,7 +74,7 @@ func ListServices(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error fetching services", http.StatusInternalServerError)
 		return
 	}
-	services, err := parseUnits(serviceStdout)
+	services, err := parseUnits(serviceStdout, ".service")
 	if err != nil {
 		http.Error(w, "Error parsing services output", http.StatusInternalServerError)
 		return
@@ -80,7 +85,7 @@ func ListServices(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error fetching sockets", http.StatusInternalServerError)
 		return
 	}
-	sockets, err := parseUnits(socketStdout)
+	sockets, err := parseUnits(socketStdout, ".socket")
 	if err != nil {
 		http.Error(w, "Error parsing sockets output", http.StatusInternalServerError)
 		return
