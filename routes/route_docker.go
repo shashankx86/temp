@@ -12,7 +12,7 @@ import (
 )
 
 // Helper function to execute shell commands
-func executeCommand(command string, args ...string) (string, error) {
+func executeCommandD(command string, args ...string) (string, error) {
 	out, err := exec.Command(command, args...).Output()
 	if err != nil {
 		return "", err
@@ -22,7 +22,7 @@ func executeCommand(command string, args ...string) (string, error) {
 
 // Endpoint to list running Docker containers
 func listRunningContainers(w http.ResponseWriter, r *http.Request) {
-	output, err := executeCommand("docker", "ps")
+	output, err := executeCommandD("docker", "ps")
 	if err != nil {
 		http.Error(w, "Error fetching running containers: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -53,7 +53,7 @@ func listRunningContainers(w http.ResponseWriter, r *http.Request) {
 
 // Endpoint to list Docker images
 func listDockerImages(w http.ResponseWriter, r *http.Request) {
-	output, err := executeCommand("docker", "image", "ls")
+	output, err := executeCommandD("docker", "image", "ls")
 	if err != nil {
 		http.Error(w, "Error fetching Docker images: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -140,7 +140,7 @@ func removeDockerImage(w http.ResponseWriter, r *http.Request) {
 		args = append(args, forceFlag)
 	}
 
-	if _, err := executeCommand("docker", args...); err != nil {
+	if _, err := executeCommandD("docker", args...); err != nil {
 		http.Error(w, "Error removing image: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
