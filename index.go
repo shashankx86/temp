@@ -222,14 +222,29 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 // Middleware to check if the user is authenticated
 func isAuthenticated(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		session, _ := store.Get(r, "session")
-		if session.Values["user"] != nil {
-			next.ServeHTTP(w, r)
-		} else {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		}
-	})
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        session, _ := store.Get(r, "session")
+
+        if session.Values["user"] != nil {
+            if session.Values["ip"] != r.RemoteAddr || session.Values["userAgent"] != r.UserAgent() {
+                http.Error(w, "Unauthorized", http.StatusUnauthorized)
+                return
+            }
+
+            lastActivity, ok := session.Values["lastActivity"].(time.Time)
+            if !ok || time.Since(lastActivity) > time.Hour {
+                http.Error(w, "Session expired", http.StatusUnauthorized)
+                return
+            }
+
+            session.Values["lastActivity"] = time.Now()
+            session.Save(r, w)
+
+            next.ServeHTTP(w, r)
+        } else {
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
+        }
+    })
 }
 
 // Handles requests to retrieve the version
