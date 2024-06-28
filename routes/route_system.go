@@ -60,14 +60,14 @@ func parseUnits(data string) []Unit {
 }
 
 func ListServices(w http.ResponseWriter, r *http.Request) {
-	serviceStdout, err := executeCommand("systemctl --user list-units --type=service --state=running")
+	serviceStdout, err := executeCommand("systemctl --user list-units --type=service --all")
 	if err != nil {
 		http.Error(w, "Error fetching services", http.StatusInternalServerError)
 		return
 	}
 	services := parseUnits(serviceStdout)
 
-	socketStdout, err := executeCommand("systemctl --user list-units --type=socket")
+	socketStdout, err := executeCommand("systemctl --user list-units --type=socket --all")
 	if err != nil {
 		http.Error(w, "Error fetching sockets", http.StatusInternalServerError)
 		return
