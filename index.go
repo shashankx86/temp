@@ -31,30 +31,31 @@ var (
 )
 
 func init() {
-	// Load environment variables from .env file
-	if err := godotenv.Load(); err != nil {
-		log.Printf("Error loading .env file: %v", err)
-	}
+    // Load environment variables from .env file
+    if err := godotenv.Load(); err != nil {
+        log.Printf("Error loading .env file: %v", err)
+    }
 
-	// Initialize session store with key from environment variable
-	key := []byte(os.Getenv("SESSION_KEY"))
-	store = sessions.NewCookieStore(key)
-	store.Options = &sessions.Options{
-		Path:     "/",
-		MaxAge:   0,    // Session cookie expires when the browser closes
-		HttpOnly: true, // Prevent JavaScript access to the cookie
-		Secure:   true, // Ensure the cookie is only sent over HTTPS
-	}
+    // Initialize session store with key from environment variable
+    key := []byte(os.Getenv("SESSION_KEY"))
+    store = sessions.NewCookieStore(key)
+    store.Options = &sessions.Options{
+        Path:     "/",
+        MaxAge:   3600, // 1 hour
+        HttpOnly: true, // Prevent JavaScript access to the cookie
+        Secure:   true, // Ensure the cookie is only sent over HTTPS
+        SameSite: http.SameSiteStrictMode, // Strict mode to prevent CSRF
+    }
 
-	// Load version from environment variables
-	VERSION = "0.0.2"
+    // Load version from environment variables
+    VERSION = "0.0.2"
 
-	// Load logging flags
-	LOG = true
-	V_LOG = true
+    // Load logging flags
+    LOG = true
+    V_LOG = true
 
-	// Set up logging to file
-	setupLogging()
+    // Set up logging to file
+    setupLogging()
 }
 
 // setupLogging initializes logging to a file, appending to it if it exists
@@ -161,63 +162,62 @@ func main() {
 
 // Handles the login requests and validates the user credentials using PAM
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	var creds struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
+    var creds struct {
+        Username string `json:"username"`
+        Password string `json:"password"`
+    }
 
-	// Decode the JSON request payload
-	err := json.NewDecoder(r.Body).Decode(&creds)
-	if err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		return
-	}
+    err := json.NewDecoder(r.Body).Decode(&creds)
+    if err != nil {
+        http.Error(w, "Invalid request payload", http.StatusBadRequest)
+        return
+    }
 
-	// Validate the provided credentials using PAM
-	t, err := pam.StartFunc("", creds.Username, func(s pam.Style, msg string) (string, error) {
-		switch s {
-		case pam.PromptEchoOff:
-			return creds.Password, nil
-		case pam.PromptEchoOn:
-			return creds.Username, nil
-		case pam.ErrorMsg:
-			return "", nil
-		case pam.TextInfo:
-			return "", nil
-		}
-		return "", fmt.Errorf("Unrecognized PAM message style: %v", s)
-	})
+    t, err := pam.StartFunc("", creds.Username, func(s pam.Style, msg string) (string, error) {
+        switch s {
+        case pam.PromptEchoOff:
+            return creds.Password, nil
+        case pam.PromptEchoOn:
+            return creds.Username, nil
+        case pam.ErrorMsg:
+            return "", nil
+        case pam.TextInfo:
+            return "", nil
+        }
+        return "", fmt.Errorf("Unrecognized PAM message style: %v", s)
+    })
 
-	if err != nil {
-		http.Error(w, "PAM authentication failed", http.StatusUnauthorized)
-		return
-	}
+    if err != nil {
+        http.Error(w, "PAM authentication failed", http.StatusUnauthorized)
+        return
+    }
 
-	err = t.Authenticate(0)
-	if err != nil {
-		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
-		return
-	}
+    err = t.Authenticate(0)
+    if err != nil {
+        http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+        return
+    }
 
-	// Invalidate previous session if exists
-	session, _ := store.Get(r, "session")
-	session.Values = make(map[interface{}]interface{})
-	session.Save(r, w)
+    session, _ := store.Get(r, "session")
+    session.Values = make(map[interface{}]interface{})
+    session.Save(r, w)
 
-	// Create a new session
-	session, _ = store.Get(r, "session")
-	session.Values["user"] = creds.Username
-	session.Save(r, w)
+    session, _ = store.Get(r, "session")
+    session.Values["user"] = creds.Username
+    session.Values["ip"] = r.RemoteAddr
+    session.Values["userAgent"] = r.UserAgent()
+    session.Values["lastActivity"] = time.Now()
+    session.Save(r, w)
 
-	if V_LOG {
-		log.Printf("User %s logged in at %s from IP %s", creds.Username, time.Now().Format(time.RFC3339), r.RemoteAddr)
-	}
+    if V_LOG {
+        log.Printf("User %s logged in at %s from IP %s", creds.Username, time.Now().Format(time.RFC3339), r.RemoteAddr)
+    }
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"message":   "Login successful",
-		"sessionId": session.ID,
-	})
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{
+        "message":   "Login successful",
+        "sessionId": session.ID,
+    })
 }
 
 // Middleware to check if the user is authenticated
