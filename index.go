@@ -121,8 +121,8 @@ func main() {
 	// Apply general rate limiting to all routes except login
 	r.Use(generalLimiterMiddleware.Handler)
 
-	// Register system routes with specific rate limiter
-	systemRouter := r.PathPrefix("/system").Subrouter()
+	// Register system and docker routes with specific rate limiter
+	systemRouter := r.PathPrefix("/io").Subrouter()
 	systemRate := limiter.Rate{
 		Period: 1 * time.Minute,
 		Limit:  70,
@@ -132,12 +132,7 @@ func main() {
 	systemRouter.Use(stdlib.NewMiddleware(systemLimiter).Handler)
 	systemRouter.Use(isAuthenticated)
 	routes.RegisterSystemRoutes(systemRouter)
-
-	// Register Docker routes under /io with same rate limiting and authentication
-	ioRouter := r.PathPrefix("/io").Subrouter()
-	ioRouter.Use(stdlib.NewMiddleware(systemLimiter).Handler)
-	ioRouter.Use(isAuthenticated)
-	routes.DockerHandler(ioRouter)
+	routes.DockerHandler(systemRouter)
 
 	port := os.Getenv("PORT")
 	if port == "" {

@@ -43,11 +43,15 @@ func executeCommand(command string) (string, error) {
 	return string(out), nil
 }
 
-func parseUnits(data string) []Unit {
+func parseUnits(data string) ([]Unit, error) {
 	unitRegex := `^\s*(\S+\.service|\S+\.socket)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)$`
-	matches := regexp.MustCompile(unitRegex).FindAllStringSubmatch(data, -1)
+	regex := regexp.MustCompile(unitRegex)
+	matches := regex.FindAllStringSubmatch(data, -1)
 	units := []Unit{}
 	for _, match := range matches {
+		if len(match) < 6 {
+			continue
+		}
 		units = append(units, Unit{
 			UNIT:        match[1],
 			LOAD:        match[2],
@@ -56,7 +60,7 @@ func parseUnits(data string) []Unit {
 			DESCRIPTION: match[5],
 		})
 	}
-	return units
+	return units, nil
 }
 
 func ListServices(w http.ResponseWriter, r *http.Request) {
@@ -65,14 +69,22 @@ func ListServices(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error fetching services", http.StatusInternalServerError)
 		return
 	}
-	services := parseUnits(serviceStdout)
+	services, err := parseUnits(serviceStdout)
+	if err != nil {
+		http.Error(w, "Error parsing services output", http.StatusInternalServerError)
+		return
+	}
 
 	socketStdout, err := executeCommand("systemctl --user list-units --type=socket --all")
 	if err != nil {
 		http.Error(w, "Error fetching sockets", http.StatusInternalServerError)
 		return
 	}
-	sockets := parseUnits(socketStdout)
+	sockets, err := parseUnits(socketStdout)
+	if err != nil {
+		http.Error(w, "Error parsing sockets output", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
