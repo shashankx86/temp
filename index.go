@@ -23,12 +23,13 @@ import (
 )
 
 var (
-    VERSION string
-    LOG     bool
-    V_LOG   bool
-    jwtSecret string
-    username  string
-    password  string
+    VERSION      string
+    LOG          bool
+    V_LOG        bool
+    jwtSecret    string
+    username     string
+    password     string
+    refreshSecret string
 )
 
 func init() {
@@ -39,6 +40,7 @@ func init() {
 
     // Load JWT secret and user credentials from environment variables
     jwtSecret = os.Getenv("JWT_SECRET")
+    refreshSecret = os.Getenv("REFRESH_SECRET")
     username = os.Getenv("USERNAME")
     password = os.Getenv("PASSWORD")
 
@@ -107,11 +109,15 @@ func main() {
     // Login endpoint with specific rate limiter
     r.Handle("/login", loginLimiterMiddleware.Handler(http.HandlerFunc(loginHandler))).Methods("POST", "OPTIONS")
 
+    // Refresh token endpoint
+    r.Handle("/refresh", http.HandlerFunc(refreshHandler)).Methods("POST", "OPTIONS")
+
     // Protected routes
     r.Handle("/version", isAuthenticated(http.HandlerFunc(versionHandler))).Methods("GET", "OPTIONS")
 
     // Handle preflight requests
     r.HandleFunc("/login", optionsHandler).Methods("OPTIONS")
+    r.HandleFunc("/refresh", optionsHandler).Methods("OPTIONS")
     r.HandleFunc("/version", optionsHandler).Methods("OPTIONS")
 
     // Apply general rate limiting to all routes except login
@@ -175,15 +181,17 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Create JWT token
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-        "username": creds.Username,
-        "exp":      time.Now().Add(time.Hour * 72).Unix(),
-    })
-
-    tokenString, err := token.SignedString([]byte(jwtSecret))
+    // Create Access Token
+    accessToken, err := createToken(creds.Username, jwtSecret, 15*time.Minute)
     if err != nil {
-        http.Error(w, "Error generating token", http.StatusInternalServerError)
+        http.Error(w, "Error generating access token", http.StatusInternalServerError)
+        return
+    }
+
+    // Create Refresh Token
+    refreshToken, err := createToken(creds.Username, refreshSecret, 7*24*time.Hour)
+    if err != nil {
+        http.Error(w, "Error generating refresh token", http.StatusInternalServerError)
         return
     }
 
@@ -193,8 +201,55 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{
-        "message": "Login successful",
-        "token":   tokenString,
+        "message":       "Login successful",
+        "access_token":  accessToken,
+        "refresh_token": refreshToken,
+    })
+}
+
+// Handles the refresh token requests
+func refreshHandler(w http.ResponseWriter, r *http.Request) {
+    var tokenReq struct {
+        RefreshToken string `json:"refresh_token"`
+    }
+
+    // Decode the JSON request payload
+    err := json.NewDecoder(r.Body).Decode(&tokenReq)
+    if err != nil {
+        http.Error(w, "Invalid request payload", http.StatusBadRequest)
+        return
+    }
+
+    // Parse the refresh token
+    token, err := jwt.Parse(tokenReq.RefreshToken, func(token *jwt.Token) (interface{}, error) {
+        if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+            return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+        }
+        return []byte(refreshSecret), nil
+    })
+
+    if err != nil || !token.Valid {
+        http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
+        return
+    }
+
+    // Extract claims
+    claims, ok := token.Claims.(jwt.MapClaims)
+    if !ok || !token.Valid {
+        http.Error(w, "Invalid refresh token claims", http.StatusUnauthorized)
+        return
+    }
+
+    // Create new Access Token
+    accessToken, err := createToken(claims["username"].(string), jwtSecret, 15*time.Minute)
+    if err != nil {
+        http.Error(w, "Error generating access token", http.StatusInternalServerError)
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{
+        "access_token": accessToken,
     })
 }
 
@@ -269,6 +324,15 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
     })
 }
 
+// Creates a JWT token
+func createToken(username string, secret string, duration time.Duration) (string, error) {
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+        "username": username,
+        "exp":      time.Now().Add(duration).Unix(),
+    })
+
+    return token.SignedString([]byte(secret))
+}
 
 // Handles OPTIONS requests for CORS preflight
 func optionsHandler(w http.ResponseWriter, r *http.Request) {
