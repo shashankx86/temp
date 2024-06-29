@@ -1,6 +1,7 @@
 package main
 
 import (
+    "context"
     "encoding/json"
     "fmt"
     "log"
@@ -42,7 +43,7 @@ func init() {
     password = os.Getenv("PASSWORD")
 
     // Load version from environment variables
-    VERSION = os.Getenv("VERSION")
+    VERSION = "0.0.3"
 
     // Load logging flags
     LOG = true
@@ -200,35 +201,74 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 // Middleware to check if the user is authenticated
 func isAuthenticated(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        tokenString := r.Header.Get("Authorization")
-        if tokenString == "" {
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" {
+            log.Printf("Missing Authorization header")
             http.Error(w, "Unauthorized", http.StatusUnauthorized)
             return
         }
 
+        // Extract the token from the "Bearer " prefix
+        if len(authHeader) < 7 || authHeader[:7] != "Bearer " {
+            log.Printf("Malformed Authorization header")
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
+            return
+        }
+
+        tokenString := authHeader[7:]
         token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
             if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-                return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+                log.Printf("Unexpected signing method: %v", token.Header["alg"])
+                return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
             }
             return []byte(jwtSecret), nil
         })
 
-        if err != nil || !token.Valid {
+        if err != nil {
+            log.Printf("Error parsing token: %v", err)
             http.Error(w, "Unauthorized", http.StatusUnauthorized)
             return
         }
 
-        next.ServeHTTP(w, r)
+        if !token.Valid {
+            log.Printf("Invalid token")
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
+            return
+        }
+
+        claims, ok := token.Claims.(jwt.MapClaims)
+        if !ok {
+            log.Printf("Invalid token claims")
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
+            return
+        }
+
+        log.Printf("Token claims: %v", claims)
+
+        // Add claims to the request context
+        ctx := context.WithValue(r.Context(), "user", claims["username"])
+        next.ServeHTTP(w, r.WithContext(ctx))
     })
 }
 
 // Handles requests to retrieve the version
 func versionHandler(w http.ResponseWriter, r *http.Request) {
+    user, ok := r.Context().Value("user").(string)
+    if !ok {
+        log.Printf("User context not found")
+        http.Error(w, "Unauthorized", http.StatusUnauthorized)
+        return
+    }
+
+    log.Printf("User %s accessed version endpoint", user)
+
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]string{
         "version": VERSION,
+        "user":    user,
     })
 }
+
 
 // Handles OPTIONS requests for CORS preflight
 func optionsHandler(w http.ResponseWriter, r *http.Request) {
