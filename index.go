@@ -2,6 +2,7 @@ package main
 
 import (
     "context"
+    "crypto/rsa"
     "encoding/json"
     "fmt"
     "log"
@@ -26,7 +27,8 @@ var (
     VERSION     string
     LOG         bool
     V_LOG       bool
-    jwtSecret   string
+    privateKey  *rsa.PrivateKey
+    publicKey   *rsa.PublicKey
     refreshSecret string
     username    string
     password    string
@@ -38,8 +40,7 @@ func init() {
         log.Printf("Error loading .env file: %v", err)
     }
 
-    // Load JWT secret and user credentials from environment variables
-    jwtSecret = os.Getenv("JWT_SECRET")
+    // Load refresh secret and user credentials from environment variables
     refreshSecret = os.Getenv("REFRESH_SECRET")
     username = os.Getenv("USERNAME")
     password = os.Getenv("PASSWORD")
@@ -50,6 +51,26 @@ func init() {
     // Load logging flags
     LOG = true
     V_LOG = true
+
+    // Load the private key
+    privateKeyData, err := os.ReadFile("keys/private_key.pem")
+    if err != nil {
+        log.Fatalf("Error reading private key: %v", err)
+    }
+    privateKey, err = jwt.ParseRSAPrivateKeyFromPEM(privateKeyData)
+    if err != nil {
+        log.Fatalf("Error parsing private key: %v", err)
+    }
+
+    // Load the public key
+    publicKeyData, err := os.ReadFile("keys//public_key.pem")
+    if err != nil {
+        log.Fatalf("Error reading public key: %v", err)
+    }
+    publicKey, err = jwt.ParseRSAPublicKeyFromPEM(publicKeyData)
+    if err != nil {
+        log.Fatalf("Error parsing public key: %v", err)
+    }
 
     // Set up logging to file
     setupLogging()
@@ -191,13 +212,13 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     // Create access and refresh tokens
-    accessToken, err := createToken(creds.Username, jwtSecret, 15*time.Minute)
+    accessToken, err := createToken(creds.Username, 15*time.Minute)
     if err != nil {
         http.Error(w, "Error generating access token", http.StatusInternalServerError)
         return
     }
 
-    refreshToken, err := createToken(creds.Username, refreshSecret, 7*24*time.Hour)
+    refreshToken, err := createToken(creds.Username, 7*24*time.Hour)
     if err != nil {
         http.Error(w, "Error generating refresh token", http.StatusInternalServerError)
         return
@@ -228,11 +249,11 @@ func refreshHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     token, err := jwt.Parse(requestData.RefreshToken, func(token *jwt.Token) (interface{}, error) {
-        if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+        if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
             log.Printf("Unexpected signing method: %v", token.Header["alg"])
             return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
         }
-        return []byte(refreshSecret), nil
+        return publicKey, nil
     })
 
     if err != nil {
@@ -257,7 +278,7 @@ func refreshHandler(w http.ResponseWriter, r *http.Request) {
     username := claims["username"].(string)
 
     // Create new access token
-    newAccessToken, err := createToken(username, jwtSecret, 15*time.Minute)
+    newAccessToken, err := createToken(username, 15*time.Minute)
     if err != nil {
         http.Error(w, "Error generating new access token", http.StatusInternalServerError)
         return
@@ -288,11 +309,11 @@ func isAuthenticated(next http.Handler) http.Handler {
 
         tokenString := authHeader[7:]
         token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-            if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+            if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
                 log.Printf("Unexpected signing method: %v", token.Header["alg"])
                 return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
             }
-            return []byte(jwtSecret), nil
+            return publicKey, nil
         })
 
         if err != nil {
@@ -341,13 +362,13 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // Helper function to create a JWT token
-func createToken(username, secret string, expiry time.Duration) (string, error) {
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+func createToken(username string, expiry time.Duration) (string, error) {
+    token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
         "username": username,
         "exp":      time.Now().Add(expiry).Unix(),
     })
 
-    tokenString, err := token.SignedString([]byte(secret))
+    tokenString, err := token.SignedString(privateKey)
     if err != nil {
         return "", err
     }
