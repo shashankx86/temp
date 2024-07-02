@@ -8,7 +8,6 @@ import (
     "log"
     "net/http"
     "os"
-    // "os/user"
     "time"
 
     "github.com/go-chi/cors"
@@ -29,7 +28,6 @@ var (
     V_LOG       bool
     privateKey  *rsa.PrivateKey
     publicKey   *rsa.PublicKey
-    refreshSecret string
     username    string
     password    string
 )
@@ -40,8 +38,7 @@ func init() {
         log.Printf("Error loading .env file: %v", err)
     }
 
-    // Load refresh secret and user credentials from environment variables
-    refreshSecret = os.Getenv("REFRESH_SECRET")
+    // Load user credentials from environment variables
     username = os.Getenv("USERNAME")
     password = os.Getenv("PASSWORD")
 
@@ -88,13 +85,6 @@ func setupLogging() {
 
 func main() {
     corsOptions := cors.Options{
-        // Get the current user's username on the host machine
-        // currentUser, err := user.Current()
-        // if err != nil {
-        //     log.Fatalf("Error getting current user: %v", err)
-        // }
-        // serverUsername := currentUser.Username
-
         AllowedOrigins:   []string{"*"},
         AllowedMethods:   []string{"GET", "POST", "DELETE", "OPTIONS"},
         AllowedHeaders:   []string{"Content-Type", "Authorization"},
@@ -109,7 +99,7 @@ func main() {
     // Apply security headers middleware
     r.Use(securityHeadersMiddleware)
 
-    // General rate limiter configuration for all routes except login and refresh
+    // General rate limiter configuration for all routes except login
     generalRate := limiter.Rate{
         Period: 1 * time.Minute,
         Limit:  60,
@@ -127,30 +117,17 @@ func main() {
     loginLimiter := limiter.New(loginLimiterStore, loginRate)
     loginLimiterMiddleware := stdlib.NewMiddleware(loginLimiter)
 
-    // Rate limiter configuration for refresh route
-    refreshRate := limiter.Rate{
-        Period: 1 * time.Minute,
-        Limit:  20,
-    }
-    refreshLimiterStore := memory.NewStore()
-    refreshLimiter := limiter.New(refreshLimiterStore, refreshRate)
-    refreshLimiterMiddleware := stdlib.NewMiddleware(refreshLimiter)
-
     // Login endpoint with specific rate limiter
     r.Handle("/login", loginLimiterMiddleware.Handler(http.HandlerFunc(loginHandler))).Methods("POST", "OPTIONS")
-
-    // Refresh endpoint with specific rate limiter
-    r.Handle("/refresh", refreshLimiterMiddleware.Handler(http.HandlerFunc(refreshHandler))).Methods("POST", "OPTIONS")
 
     // Protected routes
     r.Handle("/version", isAuthenticated(http.HandlerFunc(versionHandler))).Methods("GET", "OPTIONS")
 
     // Handle preflight requests
     r.HandleFunc("/login", optionsHandler).Methods("OPTIONS")
-    r.HandleFunc("/refresh", optionsHandler).Methods("OPTIONS")
     r.HandleFunc("/version", optionsHandler).Methods("OPTIONS")
 
-    // Apply general rate limiting to all routes except login and refresh
+    // Apply general rate limiting to all routes except login
     r.Use(generalLimiterMiddleware.Handler)
 
     // Register system and docker routes with specific rate limiter
@@ -211,16 +188,10 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Create access and refresh tokens
+    // Create access token
     accessToken, err := createToken(creds.Username, 15*time.Minute)
     if err != nil {
         http.Error(w, "Error generating access token", http.StatusInternalServerError)
-        return
-    }
-
-    refreshToken, err := createToken(creds.Username, 7*24*time.Hour)
-    if err != nil {
-        http.Error(w, "Error generating refresh token", http.StatusInternalServerError)
         return
     }
 
@@ -230,64 +201,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
-        "message":           "Login successful",
-        "access_token":      accessToken,
-        "refresh_token":     refreshToken,
-        "refresh_expiration": time.Now().Add(7 * 24 * time.Hour).Unix(),
-    })
-}
-
-// Handles refresh token requests
-func refreshHandler(w http.ResponseWriter, r *http.Request) {
-    var requestData struct {
-        RefreshToken string `json:"refresh_token"`
-    }
-
-    err := json.NewDecoder(r.Body).Decode(&requestData)
-    if err != nil {
-        http.Error(w, "Invalid request payload", http.StatusBadRequest)
-        return
-    }
-
-    token, err := jwt.Parse(requestData.RefreshToken, func(token *jwt.Token) (interface{}, error) {
-        if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-            log.Printf("Unexpected signing method: %v", token.Header["alg"])
-            return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-        }
-        return publicKey, nil
-    })
-
-    if err != nil {
-        log.Printf("Error parsing refresh token: %v", err)
-        http.Error(w, "Unauthorized", http.StatusUnauthorized)
-        return
-    }
-
-    if !token.Valid {
-        log.Printf("Invalid refresh token")
-        http.Error(w, "Unauthorized", http.StatusUnauthorized)
-        return
-    }
-
-    claims, ok := token.Claims.(jwt.MapClaims)
-    if !ok {
-        log.Printf("Invalid refresh token claims")
-        http.Error(w, "Unauthorized", http.StatusUnauthorized)
-        return
-    }
-
-    username := claims["username"].(string)
-
-    // Create new access token
-    newAccessToken, err := createToken(username, 15*time.Minute)
-    if err != nil {
-        http.Error(w, "Error generating new access token", http.StatusInternalServerError)
-        return
-    }
-
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]string{
-        "access_token": newAccessToken,
+        "message":      "Login successful",
+        "access_token": accessToken,
     })
 }
 
