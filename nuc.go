@@ -30,6 +30,7 @@ var (
     publicKey   *rsa.PublicKey
     username    string
     password    string
+    tokenExpiry time.Duration = 30 * 24 * time.Hour // Default token expiration is one month
 )
 
 func init() {
@@ -60,7 +61,7 @@ func init() {
     }
 
     // Load the public key
-    publicKeyData, err := os.ReadFile("keys//public_key.pem")
+    publicKeyData, err := os.ReadFile("keys/public_key.pem")
     if err != nil {
         log.Fatalf("Error reading public key: %v", err)
     }
@@ -189,7 +190,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     // Create access token
-    accessToken, err := createToken(creds.Username, 15*time.Minute)
+    accessToken, err := createToken(creds.Username, tokenExpiry)
     if err != nil {
         http.Error(w, "Error generating access token", http.StatusInternalServerError)
         return
@@ -206,7 +207,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
     })
 }
 
-// Middleware to check if the user is authenticated
+// Middleware to check if the user is authenticated and reset token expiration
 func isAuthenticated(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         authHeader := r.Header.Get("Authorization")
@@ -253,8 +254,19 @@ func isAuthenticated(next http.Handler) http.Handler {
 
         log.Printf("Token claims: %v", claims)
 
+        // Reset the token expiration time
+        username := claims["username"].(string)
+        newToken, err := createToken(username, tokenExpiry)
+        if err != nil {
+            http.Error(w, "Error resetting token expiration", http.StatusInternalServerError)
+            return
+        }
+
+        // Set the new token in the response header
+        w.Header().Set("Authorization", "Bearer "+newToken)
+
         // Add claims to the request context
-        ctx := context.WithValue(r.Context(), "user", claims["username"])
+        ctx := context.WithValue(r.Context(), "user", username)
         next.ServeHTTP(w, r.WithContext(ctx))
     })
 }
