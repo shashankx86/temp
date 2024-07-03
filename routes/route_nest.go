@@ -1,60 +1,48 @@
-// components/nestarg.go
-
-package components
+package routes
 
 import (
     "encoding/json"
     "net/http"
     "os/exec"
-    "regexp"
     "strings"
 )
 
-func GetNestResources(w http.ResponseWriter, r *http.Request) {
-    output, err := executeCommand("nest", "resources")
+type SystemUsage struct {
+    Disk    Usage `json:"disk"`
+    Memory  Usage `json:"memory"`
+}
+
+type Usage struct {
+    Total  string `json:"total"`
+    Used   string `json:"used"`
+}
+
+func NestResourcesHandler(w http.ResponseWriter, r *http.Request) {
+    cmd := exec.Command("sh", "-c", "nest resources")
+    output, err := cmd.Output()
     if err != nil {
-        http.Error(w, "Error executing command: "+err.Error(), http.StatusInternalServerError)
+        http.Error(w, "Failed to execute command", http.StatusInternalServerError)
         return
     }
 
-    // Define regex patterns
-    diskUsagePattern := regexp.MustCompile(`Disk usage: (\d+\.\d+) GB used out of (\d+\.\d+) GB limit`)
-    memoryUsagePattern := regexp.MustCompile(`Memory usage: (\d+\.\d+) GB used out of (\d+\.\d+) GB limit`)
+    lines := strings.Split(string(output), "\n")
+    diskUsage := strings.Split(lines[1], ":")[1]
+    memoryUsage := strings.Split(lines[2], ":")[1]
 
-    // Extract disk usage
-    diskMatches := diskUsagePattern.FindStringSubmatch(output)
-    if len(diskMatches) != 3 {
-        http.Error(w, "Unexpected disk usage format", http.StatusInternalServerError)
-        return
-    }
+    diskParts := strings.Fields(diskUsage)
+    memoryParts := strings.Fields(memoryUsage)
 
-    // Extract memory usage
-    memoryMatches := memoryUsagePattern.FindStringSubmatch(output)
-    if len(memoryMatches) != 3 {
-        http.Error(w, "Unexpected memory usage format", http.StatusInternalServerError)
-        return
-    }
-
-    // Prepare JSON response
-    resources := map[string]map[string]string{
-        "Disk": {
-            "Used":  diskMatches[1] + " GB",
-            "Total": diskMatches[2] + " GB",
+    usage := SystemUsage{
+        Disk: Usage{
+            Total: diskParts[4],
+            Used:  diskParts[1],
         },
-        "Memory": {
-            "Used":  memoryMatches[1] + " GB",
-            "Total": memoryMatches[2] + " GB",
+        Memory: Usage{
+            Total: memoryParts[4],
+            Used:  memoryParts[1],
         },
     }
 
     w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(resources)
-}
-
-func executeCommand(command string, args ...string) (string, error) {
-    out, err := exec.Command(command, args...).Output()
-    if err != nil {
-        return "", err
-    }
-    return string(out), nil
+    json.NewEncoder(w).Encode(usage)
 }
