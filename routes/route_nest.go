@@ -47,29 +47,33 @@ func NestResourcesHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     // Parse Disk usage line
-    diskLineParts := strings.Split(lines[1], " ")
-    if len(diskLineParts) < 7 {
+    diskLineParts := strings.Fields(lines[0])
+    if len(diskLineParts) < 8 {
         log.Println("Unexpected disk usage format")
         http.Error(w, "Unexpected disk usage format", http.StatusInternalServerError)
         return
     }
+    diskUsed := diskLineParts[2]
+    diskTotal := diskLineParts[7]
 
     // Parse Memory usage line
-    memoryLineParts := strings.Split(lines[2], " ")
-    if len(memoryLineParts) < 7 {
+    memoryLineParts := strings.Fields(lines[1])
+    if len(memoryLineParts) < 8 {
         log.Println("Unexpected memory usage format")
         http.Error(w, "Unexpected memory usage format", http.StatusInternalServerError)
         return
     }
+    memoryUsed := memoryLineParts[2]
+    memoryTotal := memoryLineParts[7]
 
     usage := SystemUsage{
         Disk: Usage{
-            Total: diskLineParts[6],  // "15.0 GB"
-            Used:  diskLineParts[2],  // "4.58 GB"
+            Total: diskTotal,
+            Used:  diskUsed,
         },
         Memory: Usage{
-            Total: memoryLineParts[6],  // "3.0 GB"
-            Used:  memoryLineParts[2],  // "3.0 GB"
+            Total: memoryTotal,
+            Used:  memoryUsed,
         },
     }
 
