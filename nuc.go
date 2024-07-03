@@ -128,7 +128,7 @@ func main() {
     r.HandleFunc("/login", optionsHandler).Methods("OPTIONS")
     r.HandleFunc("/version", optionsHandler).Methods("OPTIONS")
 
-    // Apply general rate limiting to all routes except login
+    // Apply general rate limiting to all routes except login and version
     r.Use(generalLimiterMiddleware.Handler)
 
     // Register system and docker routes with specific rate limiter
