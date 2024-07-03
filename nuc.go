@@ -143,6 +143,8 @@ func main() {
     systemRouter.Use(isAuthenticated)
     routes.RegisterSystemRoutes(systemRouter)
     routes.DockerHandler(systemRouter)
+    routes.NestHandler(systemRouter)
+    
 
     port := os.Getenv("PORT")
     if port == "" {
