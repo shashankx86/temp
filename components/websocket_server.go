@@ -5,7 +5,6 @@ package components
 import (
 	"log"
 	"net/http"
-	"os/user"
 	"os/exec"
 
 	"github.com/creack/pty"
@@ -19,6 +18,8 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+var SHELL_TYPE = "bash"
+
 func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -27,7 +28,21 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	shell := exec.Command("bash")
+	var shell *exec.Cmd
+	switch SHELL_TYPE {
+	case "bash":
+		shell = exec.Command("bash")
+	case "tmux":
+		shell, err = tmuxCommand()
+		if err != nil {
+			log.Printf("Failed to start tmux: %v", err)
+			return
+		}
+	default:
+		log.Printf("Unknown shell type: %s", SHELL_TYPE)
+		return
+	}
+
 	ptyFile, err := pty.Start(shell)
 	if err != nil {
 		log.Printf("Failed to start pty: %v", err)
@@ -56,22 +71,32 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func StartWebSocketServer() {
-	currentUser, err := user.Current()
-	if err != nil {
-		log.Fatalf("Error getting current user: %v", err)
-	}
-	serverUsername := currentUser.Username
-
 	corsOptions := cors.Options{
-		AllowedOrigins:   []string{"https://ncwi." + serverUsername + ".hackclub.app", "http://localhost"},
+		AllowedOrigins: []string{"*"},
 	}
-
 	corsMiddleware := cors.New(corsOptions).Handler
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		corsMiddleware(http.HandlerFunc(HandleWebSocket)).ServeHTTP(w, r)
 	})
 
-	log.Println("WebSocket server is running on ws://localhost:5492")
-	log.Fatal(http.ListenAndServe(":5492", nil))
+	log.Printf("WebSocket server is running on ws://localhost:5492 (Shell Type: %s)", SHELL_TYPE)
+	log.Fatal(http.ListenAndServe(":5498", nil))
+}
+
+// tmuxCommand creates or attaches to a tmux session named 'nuc-rev'
+func tmuxCommand() (*exec.Cmd, error) {
+	// Check if tmux session 'nuc-rev' exists
+	cmd := exec.Command("tmux", "has-session", "-t", "nuc-rev")
+	err := cmd.Run()
+	if err != nil {
+		// Session does not exist, create a new one
+		cmd = exec.Command("tmux", "new-session", "-s", "nuc-rev", "-d")
+		if err := cmd.Run(); err != nil {
+			return nil, err
+		}
+	}
+
+	// Attach to the 'nuc-rev' tmux session
+	return exec.Command("tmux", "attach-session", "-t", "nuc-rev"), nil
 }
