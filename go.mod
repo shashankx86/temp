@@ -6,6 +6,7 @@ require (
 	github.com/creack/pty v1.1.21
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/go-chi/cors v1.2.1
+	github.com/googollee/go-socket.io v1.7.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/sessions v1.3.0
 	github.com/gorilla/websocket v1.5.3
@@ -15,6 +16,8 @@ require (
 )
 
 require (
+	github.com/gofrs/uuid v4.4.0+incompatible // indirect
+	github.com/gomodule/redigo v1.9.2 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 )
