@@ -8,86 +8,80 @@ import (
 	"os/exec"
 
 	"github.com/creack/pty"
-	socketio "github.com/googollee/go-socket.io"
+	"github.com/gorilla/websocket"
 	"github.com/go-chi/cors"
 )
 
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
 var SHELL_TYPE = "bash"
 
-func HandleSocketIO(server socketio.Server) {
-	server.OnConnect("/", func(s socketio.Conn) error {
-		s.SetContext("")
-		log.Printf("Connected: %s", s.ID())
+func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("Failed to upgrade websocket: %v", err)
+		return
+	}
+	defer conn.Close()
 
-		var shell *exec.Cmd
-		var err error
-		switch SHELL_TYPE {
-		case "bash":
-			shell = exec.Command("bash")
-		case "tmux":
-			shell, err = tmuxCommand()
-			if err != nil {
-				log.Printf("Failed to start tmux: %v", err)
-				s.Close()
-				return err
-			}
-		default:
-			log.Printf("Unknown shell type: %s", SHELL_TYPE)
-			s.Close()
-			return nil
-		}
-
-		ptyFile, err := pty.Start(shell)
+	var shell *exec.Cmd
+	switch SHELL_TYPE {
+	case "bash":
+		shell = exec.Command("bash")
+	case "tmux":
+		shell, err = tmuxCommand()
 		if err != nil {
-			log.Printf("Failed to start pty: %v", err)
-			s.Close()
-			return err
+			log.Printf("Failed to start tmux: %v", err)
+			return
 		}
-		defer ptyFile.Close()
+	default:
+		log.Printf("Unknown shell type: %s", SHELL_TYPE)
+		return
+	}
 
-		go func() {
-			buf := make([]byte, 1024)
-			for {
-				n, err := ptyFile.Read(buf)
-				if err != nil {
-					return
-				}
-				s.Emit("output", string(buf[:n]))
+	ptyFile, err := pty.Start(shell)
+	if err != nil {
+		log.Printf("Failed to start pty: %v", err)
+		return
+	}
+	defer ptyFile.Close()
+
+	go func() {
+		buf := make([]byte, 1024)
+		for {
+			n, err := ptyFile.Read(buf)
+			if err != nil {
+				return
 			}
-		}()
+			conn.WriteMessage(websocket.TextMessage, buf[:n])
+		}
+	}()
 
-		s.On("input", func(msg string) {
-			ptyFile.Write([]byte(msg))
-		})
-
-		s.OnDisconnect(func(reason string) {
-			log.Printf("Disconnected: %s", reason)
-		})
-
-		return nil
-	})
+	for {
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			break
+		}
+		ptyFile.Write(msg)
+	}
 }
 
 func StartWebSocketServer() {
-	server := socketio.NewServer(nil)
-
-	HandleSocketIO(*server)
-
-	server.OnError("/", func(s socketio.Conn, e error) {
-		log.Printf("Error: %v", e)
-	})
-
 	corsOptions := cors.Options{
 		AllowedOrigins: []string{"*"},
 	}
 	corsMiddleware := cors.New(corsOptions).Handler
 
-	mux := http.NewServeMux()
-	mux.Handle("/socket.io/", corsMiddleware(server))
-	mux.Handle("/", http.FileServer(http.Dir("./public")))
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		corsMiddleware(http.HandlerFunc(HandleWebSocket)).ServeHTTP(w, r)
+	})
 
-	log.Printf("WebSocket server is running on ws://localhost:5498 (Shell Type: %s)", SHELL_TYPE)
-	log.Fatal(http.ListenAndServe(":5498", mux))
+	log.Printf("WebSocket server is running on ws://localhost:5492 (Shell Type: %s)", SHELL_TYPE)
+	log.Fatal(http.ListenAndServe(":5498", nil))
 }
 
 // tmuxCommand creates or attaches to a tmux session named 'nuc-rev'

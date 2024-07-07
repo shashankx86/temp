@@ -84,14 +84,6 @@ func setupLogging() {
     log.Printf("Server started at: %s", time.Now().Format(time.RFC3339))
 }
 
-// Handles the ping requests and returns "pong"
-func pingHandler(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]string{
-        "message": "pong",
-    })
-}
-
 func main() {
     corsOptions := cors.Options{
         AllowedOrigins:   []string{"*"},
@@ -131,9 +123,6 @@ func main() {
 
     // Protected routes
     r.Handle("/version", isAuthenticated(http.HandlerFunc(versionHandler))).Methods("GET", "OPTIONS")
-
-    // Ping endpoint
-    r.HandleFunc("/ping", pingHandler).Methods("GET")
 
     // Handle preflight requests
     r.HandleFunc("/login", optionsHandler).Methods("OPTIONS")
