@@ -118,6 +118,9 @@ func main() {
     loginLimiter := limiter.New(loginLimiterStore, loginRate)
     loginLimiterMiddleware := stdlib.NewMiddleware(loginLimiter)
 
+    // Ping endpoint
+    r.HandleFunc("/ping", pingHandler).Methods("GET")
+
     // Login endpoint with specific rate limiter
     r.Handle("/login", loginLimiterMiddleware.Handler(http.HandlerFunc(loginHandler))).Methods("POST", "OPTIONS")
 
